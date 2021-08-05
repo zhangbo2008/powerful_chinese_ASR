@@ -207,8 +207,8 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         """
         Converts a connectionist-temporal-classification (CTC) output tokens into a single string.
         """
-        # group same tokens into non-repeating tokens in CTC style decoding
-        if group_tokens:
+        # group same tokens into non-repeating tokens in CTC style decoding  # ctc 解码算法.
+        if group_tokens:  # groupby()把迭代器中相邻的，指定特征重复的元素挑出来放在一起
             tokens = [token_group[0] for token_group in groupby(tokens)]
 
         # filter self.pad_token which is used as CTC-blank token

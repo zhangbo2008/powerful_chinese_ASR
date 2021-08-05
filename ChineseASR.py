@@ -1,14 +1,14 @@
 epoch=10
 # 2021-08-04,17点25   这套代码已经完美了. 这套跑完. 会发现输入的语句经过finetune可以完美的输出结果了!!!!!!!!!!!!
 
-
+#dropout
 import librosa
 import torch
 import torchaudio
 from datasets import load_dataset
 from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
 # 配置好cache,不然就跑c盘去了.c盘太宝贵了555555555
-processor = Wav2Vec2Processor.from_pretrained("ydshieh/wav2vec2-large-xlsr-53-chinese-zh-cn-gpt")
+processor = Wav2Vec2Processor.from_pretrained("ydshieh/wav2vec2-large-xlsr-53-chinese-zh-cn-gpt") # current_processor == feature_extarctor 音频预处理. 做一些归一化,----tokenizer 定义的是nlp 里面的编码. seq2seq 模型. 把语音--->文本.
 tokenizer = processor
 model = Wav2Vec2ForCTC.from_pretrained("ydshieh/wav2vec2-large-xlsr-53-chinese-zh-cn-gpt",cache_dir='E:/saving_model')  # 这种写法就把模型存到这里面了.然后下次继续这么写,会在这里面读取.
 
@@ -25,14 +25,14 @@ if 1:
     #     return batch
     #========run demo
     # test_dataset = test_dataset.map(speech_file_to_array_fn)
-    import soundfile as sf
+    import soundfile as sf # 把语音转化为一维数组.
     name='chinese.wav'
     src_sig, sr = sf.read(name)  # name是要 输入的wav 返回 src_sig:音频数据  sr:原采样频率
     dst_sig = librosa.resample(src_sig, sr, 16000)
     inputs = processor(dst_sig, sampling_rate=16_000, return_tensors="pt", padding=True)
 
     with torch.no_grad():
-        logits = model(inputs.input_values, attention_mask=inputs.attention_mask).logits
+        logits = model(inputs.input_values, attention_mask=inputs.attention_mask).logits # 8w --->cnn进过之后变成275个特征.
 
     predicted_ids = torch.argmax(logits, dim=-1)
 
@@ -99,7 +99,7 @@ input_values = processor(dst_sig, sampling_rate=16_000, return_tensors="pt", pad
 target_transcription = "宋朝末年年间定居粉岭围"
 processor.tokenizer.save_vocabulary("saving_dict") # 把字典文件存下来, 可以看看里面都是什么内容.
  # wrap processor as target processor to encode labels
-with processor.as_target_processor():
+with processor.as_target_processor(): # 上下文.
   labels = processor(target_transcription, return_tensors="pt").input_ids       # 把答案也进行编码,跟语音编码是一样的.上面用的特征提取器, 下面用的nlp编码.
 # 编码之后也是38这个长度.
 
@@ -142,7 +142,7 @@ for _ in range(epoch):
 
 
 
-    loss = model(input_values, labels=labels).loss
+    loss = model(input_values, labels=labels).loss # 传attantion mask 随便. 因为你不传入他也是默认全为1.
     loss.backward()
     optimizer.step()
 

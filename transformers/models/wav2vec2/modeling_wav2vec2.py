@@ -156,7 +156,7 @@ class Wav2Vec2LayerNormConvLayer(nn.Module):
         hidden_states = self.conv(hidden_states)
 
         hidden_states = hidden_states.transpose(-2, -1)
-        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = self.layer_norm(hidden_states) # 经典nlp方法.
         hidden_states = hidden_states.transpose(-2, -1)
 
         hidden_states = self.activation(hidden_states)
@@ -615,11 +615,11 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
                 attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
             )
 
-        position_embeddings = self.pos_conv_embed(hidden_states) # post conv 嵌入层. 计算的是位置特征.
-        hidden_states = hidden_states + position_embeddings
+        position_embeddings = self.pos_conv_embed(hidden_states) # post conv 嵌入层. 计算的是位置特征. 为什么语音识别用卷积, 不是用 nlp里面的 sin cos linear. 因为语音.连续性特别重要.
+        hidden_states = hidden_states + position_embeddings # 跟bert一样. bert 经典方法.
         hidden_states = self.dropout(hidden_states)
 
-        for layer in self.layers: # 24层的注意力.
+        for layer in self.layers: # 24层的注意力. # 跟 attention is all you need 一样. 自注意力. 275--8w.. 自注意力.非常消耗算力. 用短的才行. bert 一般小于512.  stride控制.输出的shape.
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -628,14 +628,14 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
             if self.training and (dropout_probability < self.config.layerdrop):  # skip the layer
                 layer_outputs = (None, None) # 如果训练并且按照概率0.1的概率丢掉这个层.也就是输出为None即可.
             else:
-                if getattr(self.config, "gradient_checkpointing", False) and self.training: # 看配置里面是否用自定义方式运行网络还是下面的默认方式运行.
+                if getattr(self.config, "gradient_checkpointing", False) and self.training: # 看配置里面是否用自定义方式运行网络还是下面的默认方式运行.==========使用这种方式训练会节省空间.
                     # create gradient checkpointing function
                     def create_custom_forward(module):
                         def custom_forward(*inputs):
                             return module(*inputs, output_attentions)
 
                         return custom_forward
-
+# https://blog.csdn.net/weixin_43002433/article/details/105322846  pytorch 高效内存管理的使用.
                     layer_outputs = torch.utils.checkpoint.checkpoint(
                         create_custom_forward(layer),
                         hidden_states,
@@ -1037,7 +1037,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.wav2vec2( # 神经网络编码部分. 底层使用cnn和 attention
+        outputs = self.wav2vec2( # 神经网络编码部分. 底层使用cnn和 attention # 使用cnn 借鉴了bert方法.
             input_values,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
@@ -1051,7 +1051,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         logits = self.lm_head(hidden_states) # 然后直接输出每一个位置的汉字编码即可.  当然会输出大量重复的内容,所以ctc 做处理即可.
 
         loss = None
-        if labels is not None:
+        if labels is not None:# 这种写法让train和test 代码统一.
 
             # retrieve loss input_lengths from attention_mask
             attention_mask = (
@@ -1068,9 +1068,9 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
             log_probs = F.log_softmax(logits, dim=-1).transpose(0, 1) #用log_softmax来计算概率. 就是在softmax之后再来一个log运算. 因为ctc的输入就是要log之后的.
 # 用 pytorch 的ctc 一行代码就搞定.
             with torch.backends.cudnn.flags(enabled=False):
-                loss = F.ctc_loss(         # 语音的学习一定要用ctc!!!!!!!!!!
+                loss = F.ctc_loss(         # 语音的学习一定要用ctc!!!!!!!!!!======这里面不讲了.讲一下使用.就是torch里面这一行代码就够了.这个地方要吧ctc 如何使用弄好. 后续有时间将ctc源码.
                     log_probs,  # 292         第一个参数是yhat 的log后.
-                    flattened_targets,   #38       第二个参数是真实标签
+                    flattened_targets,   #38       第二个参数是真实标签  targets 就表示groud_true
                     input_lengths,         # 然后是输入长度 第一个变量的长度
                     target_lengths,          # 第二个变量的长度
                     blank=self.config.pad_token_id,  # padding 的编码  vocab.json里面是"[PAD]"
